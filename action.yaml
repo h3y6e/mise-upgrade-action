@@ -1,0 +1,73 @@
+name: mise-upgrade-action
+description: Run mise upgrade --bump and create a pull request if needed.
+
+inputs:
+  token:
+    description: GitHub token used for mise setup and pull request creation. When omitted, the action uses the workflow GITHUB_TOKEN.
+    required: false
+  working-directory:
+    description: Directory where mise commands should run.
+    required: false
+    default: "."
+  tools:
+    description: Whitespace-separated mise tools to upgrade. Empty upgrades all configured tools.
+    required: false
+    default: ""
+  branch:
+    description: The pull request branch name.
+    required: false
+    default: mise-upgrade-action/patch
+  commit-message:
+    description: The message to use when committing changes.
+    required: false
+    default: "[mise-upgrade-action] automated change"
+  title:
+    description: The title of the pull request.
+    required: false
+    default: Changes by mise-upgrade-action
+  body:
+    description: The body of the pull request.
+    required: false
+    default: "Automated changes by [mise-upgrade-action](https://github.com/h3y6e/mise-upgrade-action)."
+
+outputs:
+  pr-number:
+    description: The pull request number.
+    value: ${{ steps.pr.outputs.pull-request-number }}
+  pr-url:
+    description: The pull request URL.
+    value: ${{ steps.pr.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up mise
+      uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      with:
+        install: "false"
+        working_directory: ${{ inputs.working-directory }}
+        github_token: ${{ inputs.token || github.token }}
+
+    - name: Upgrade mise tools
+      run: |
+        if [[ -n "$INPUT_TOOLS" ]]; then
+          tools_text="${INPUT_TOOLS//$'\n'/ }"
+          read -r -a tools <<< "$tools_text"
+          mise --cd "$INPUT_WORKING_DIRECTORY" --yes upgrade --bump "${tools[@]}"
+        else
+          mise --cd "$INPUT_WORKING_DIRECTORY" --yes upgrade --bump
+        fi
+      shell: bash
+      env:
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_TOOLS: ${{ inputs.tools }}
+
+    - name: Create pull request
+      id: pr
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      with:
+        token: ${{ inputs.token || github.token }}
+        branch: ${{ inputs.branch }}
+        commit-message: ${{ inputs.commit-message }}
+        title: ${{ inputs.title }}
+        body: ${{ inputs.body }}
